@@ -2,6 +2,16 @@
 
 A private piano listening and practice workspace. Real microphone samples become measured pitches, highlighted piano keys, musical notation, and timestamped session events. There is no production demo generator, simulated detector, backend, or audio upload.
 
+## GitHub Pages
+
+The Pages URL is **https://deepinkgroup.github.io/xon-music/**. The workflow in `.github/workflows/pages.yml` tests, builds, and deploys automatically on every push to `main`; it can also be run manually in GitHub Actions. In repository **Settings → Pages**, the publishing source must be **GitHub Actions**. Private repositories require a GitHub plan that supports Pages; GitHub Free requires a public repository.
+
+`npm run build:pages` builds into `dist-pages/` using the `/xon-music/` base path, including microphone worklet and worker assets. Ordinary `npm run build` keeps the root URL used by the desktop launcher. HTTPS on Pages supports microphone access; each visitor explicitly grants permission and their audio stays on their own device.
+
+To verify the Pages build locally, run `npm run build:pages` followed by `node scripts/production-check.mjs --pages`.
+
+References: [GitHub Pages availability](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages), [Vite deployment guide](https://vite.dev/guide/static-deploy.html).
+
 ## Run locally
 
 Requires Node.js 20.19+ or 22.12+ (tested with Node 24), npm, and a current browser.

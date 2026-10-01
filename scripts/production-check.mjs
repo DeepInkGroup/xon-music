@@ -5,16 +5,21 @@ import assert from 'node:assert/strict';
 import { chromium } from '@playwright/test';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const server = spawn(process.execPath, [path.join(root, 'node_modules/vite/bin/vite.js'), 'preview', '--host', '127.0.0.1', '--port', '5178', '--strictPort'], { cwd: root, windowsHide: true, stdio: 'pipe' });
+const pagesBuild = process.argv.includes('--pages');
+const base = process.env.XON_CHECK_BASE ?? (pagesBuild ? '/xon-music/' : '/');
+const outputDirectory = process.env.XON_CHECK_OUT_DIR ?? (pagesBuild ? 'dist-pages' : 'dist');
+const remoteUrl = process.env.XON_CHECK_URL;
+const appUrl = remoteUrl ?? `http://127.0.0.1:5178${base}`;
+const server = remoteUrl ? null : spawn(process.execPath, [path.join(root, 'node_modules/vite/bin/vite.js'), 'preview', '--host', '127.0.0.1', '--port', '5178', '--strictPort', '--base', base, '--outDir', outputDirectory], { cwd: root, windowsHide: true, stdio: 'pipe' });
 let serverOutput = '';
-server.stdout.on('data', data => { serverOutput += data; });
-server.stderr.on('data', data => { serverOutput += data; });
+server?.stdout.on('data', data => { serverOutput += data; });
+server?.stderr.on('data', data => { serverOutput += data; });
 let browser;
 try {
   let ready = false;
   for (let attempt = 0; attempt < 40; attempt++) {
-    if (server.exitCode !== null) throw new Error(serverOutput);
-    try { if ((await fetch('http://127.0.0.1:5178')).ok) { ready = true; break; } } catch { /* Server is starting. */ }
+    if (server && server.exitCode !== null) throw new Error(serverOutput);
+    try { if ((await fetch(appUrl)).ok) { ready = true; break; } } catch { /* Server is starting. */ }
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   assert(ready, 'Production preview did not start.');
@@ -31,7 +36,7 @@ try {
       const stream = await original(constraints); window.testStreams.push(stream); return stream;
     };
   });
-  await page.goto('http://127.0.0.1:5178');
+  await page.goto(appUrl);
   await page.getByRole('button', { name: 'Start listening', exact: true }).click();
   await page.locator('.piano-key[data-midi="60"].active').waitFor({ timeout: 12000 });
   assert.equal(await page.getByTestId('live-note').textContent(), 'C4');
@@ -46,7 +51,7 @@ try {
   assert(await page.evaluate(() => window.testStreams.length === 2 && window.testStreams.every(stream => stream.getTracks().every(track => track.readyState === 'ended'))));
   assert.equal(await page.locator('.piano-key.active').count(), 0);
   assert.deepEqual(errors, []);
-  console.log('Production build passed: actual microphone capture, measured C4, VexFlow notes, pause/resume, and released microphone tracks.');
+  console.log(`${appUrl} passed: actual microphone capture, measured C4, VexFlow notes, pause/resume, and released microphone tracks.`);
 } finally {
-  await browser?.close(); server.kill();
+  await browser?.close(); server?.kill();
 }
