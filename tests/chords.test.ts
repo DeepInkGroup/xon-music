@@ -42,4 +42,13 @@ describe('simultaneous microphone signal decomposition', () => {
     expect(tracker.active.map(n => n.midi)).toEqual([60]); expect(ends.map(n => n.midi)).toEqual([64, 67]);
     tracker.finish(.8); expect(tracker.active).toHaveLength(0);
   });
+  it('accepts a newly struck voice after an existing chord has started to decay', () => {
+    const stream = new PolyphonicDetector();
+    const sustained = downsample(chordAudio([60, 64, 67]), 48000);
+    const quieter = Float32Array.from(sustained.samples, sample => sample * .3);
+    stream.detect(sustained.samples, sustained.sampleRate);
+    for (let i = 0; i < 20; i++) stream.detect(quieter, sustained.sampleRate);
+    const added = downsample(chordAudio([60, 64, 67, 69]), 48000);
+    expect(stream.detect(added.samples, added.sampleRate).pitches.map(p => p.midi)).toContain(69);
+  });
 });

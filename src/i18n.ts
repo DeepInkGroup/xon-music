@@ -56,6 +56,13 @@ const en = {
   playing: 'PLAYING', playbackPaused: 'PAUSED', seekPlayback: 'Playback position', playbackSpeed: 'Speed', volume: 'Volume', loop: 'Loop',
   autoReplay: 'Play after recording', playbackError: 'Unable to play audio. Tap Play again or check your browser audio settings.',
   chordConfidence: 'Spectral confidence', spectralFit: 'Spectrum fit', replayHint: 'Recorded notes are synthesized locally. Original microphone audio is not saved.',
+  harmony: 'Chord analysis', recognizedChord: 'Recognized harmony', listeningForChord: 'Listening for a chord',
+  playThree: 'Play at least three different notes together.', holdChord: 'Hold the chord clearly to identify its harmony.',
+  startChord: 'Start listening and play a chord.', measuredVoices: 'Measured notes', detectedVoice: 'Detected note', noVoices: 'Measured notes will appear here.',
+  chordAnalysisHint: 'Chord names require simultaneous measured notes. Brief signal gaps are smoothed.',
+  rootRole: 'Root', secondRole: 'Second', minorThirdRole: 'Minor third', majorThirdRole: 'Major third', fourthRole: 'Fourth',
+  flatFifthRole: 'Flat fifth', fifthRole: 'Fifth', augFifthRole: 'Augmented fifth', sixthRole: 'Sixth',
+  flatSeventhRole: 'Flat seventh', majorSeventhRole: 'Major seventh',
 } as const;
 export type TranslationKey = keyof typeof en;
 const fa: Record<TranslationKey, string> = {
@@ -99,6 +106,13 @@ const fa: Record<TranslationKey, string> = {
   playing:'در حال پخش', playbackPaused:'مکث', seekPlayback:'موقعیت پخش', playbackSpeed:'سرعت', volume:'بلندی صدا', loop:'تکرار',
   autoReplay:'پخش پس از ثبت اجرا', playbackError:'پخش صدا ممکن نشد. دوباره پخش را بزنید یا تنظیمات صدای مرورگر را بررسی کنید.',
   chordConfidence:'اطمینان طیفی', spectralFit:'برازش طیف', replayHint:'صدای نت‌های ثبت‌شده روی دستگاه ساخته می‌شود. صدای اصلی میکروفون ذخیره نمی‌شود.',
+  harmony:'تحلیل آکورد', recognizedChord:'هارمونی شناسایی‌شده', listeningForChord:'در انتظار آکورد',
+  playThree:'دست‌کم سه نت متفاوت را هم‌زمان بنوازید.', holdChord:'آکورد را واضح نگه دارید تا هارمونی آن مشخص شود.',
+  startChord:'شنیدن را شروع کنید و یک آکورد بنوازید.', measuredVoices:'نت‌های اندازه‌گیری‌شده', detectedVoice:'نت تشخیص‌داده‌شده', noVoices:'نت‌های اندازه‌گیری‌شده اینجا نمایش داده می‌شوند.',
+  chordAnalysisHint:'نام آکورد بر پایهٔ نت‌های هم‌زمان اندازه‌گیری‌شده است. وقفه‌های کوتاه صدا هموار می‌شوند.',
+  rootRole:'پایه', secondRole:'دوم', minorThirdRole:'سوم کوچک', majorThirdRole:'سوم بزرگ', fourthRole:'چهارم',
+  flatFifthRole:'پنجم کاسته', fifthRole:'پنجم', augFifthRole:'پنجم افزوده', sixthRole:'ششم',
+  flatSeventhRole:'هفتم کوچک', majorSeventhRole:'هفتم بزرگ',
 };
 export function translate(language: Language, key: TranslationKey): string { return (language === 'fa' ? fa : en)[key]; }
 export const LanguageContext = createContext<Language>('en');

@@ -9,8 +9,31 @@ const HARMONICS = [1, .65, .35, .18, .12, .08, .05, .04];
  * Novel-partial checks suppress octave/upper-harmonic ghosts instead of claiming ambiguous notes.
  */
 export class PolyphonicDetector {
+  private previousSpectrum: Float64Array | null = null;
+  private previousRate = 0;
+  private previousRms = 0;
+  private frameNumber = 0;
+  private lastAttackFrame = 0;
+  private recent = new Map<number, number>();
+
+  reset(): void {
+    this.previousSpectrum = null;
+    this.previousRate = 0;
+    this.previousRms = 0;
+    this.frameNumber = 0;
+    this.lastAttackFrame = 0;
+    this.recent.clear();
+  }
+
   detect(samples: Float32Array, sampleRate: number): { pitches: DetectedPitch[]; fit: number } {
     const spectrum = magnitudeSpectrum(samples), peaks = spectralPeaks(spectrum, sampleRate);
+    let squared = 0; for (const sample of samples) squared += sample * sample;
+    const rms = Math.sqrt(squared / samples.length);
+    const frameNumber = ++this.frameNumber;
+    const previousSpectrum = this.previousRate === sampleRate ? this.previousSpectrum : null;
+    const previousRms = this.previousRms;
+    this.previousSpectrum = spectrum; this.previousRate = sampleRate; this.previousRms = rms;
+    if (rms > previousRms * 1.35 && rms - previousRms > .001) this.lastAttackFrame = frameNumber;
     if (!peaks.length) return { pitches: [], fit: 0 };
     const maxAmplitude = Math.max(...peaks.map(p => p.amplitude));
     const resolution = sampleRate / samples.length;
@@ -58,7 +81,20 @@ export class PolyphonicDetector {
       const templateNorm = Math.sqrt(HARMONICS.reduce((sum, n) => sum + n * n, 0));
       const harmonicFit = observed.reduce((sum, n, i) => sum + n * HARMONICS[i], 0) / (norm * templateNorm || 1);
       return { midi: candidate.midi, frequency: candidate.frequency, confidence: Math.max(0, Math.min(1, harmonicFit * Math.sqrt(fit))) };
-    }).filter(p => p.confidence >= .7 && Math.abs(1200 * Math.log2(p.frequency / midiFrequency(p.midi))) <= 38);
+    }).filter(p => p.confidence >= .7 && Math.abs(1200 * Math.log2(p.frequency / midiFrequency(p.midi))) <= 38)
+      .filter(p => {
+        if (!previousSpectrum || frameNumber <= 4 || frameNumber - this.lastAttackFrame <= 14 || frameNumber - (this.recent.get(p.midi) ?? -100) <= 5) return true;
+        // A decaying harmonic is not a new struck key. A new voice needs a rise at
+        // its fundamental (or a clearly renewed whole-signal attack). Compare
+        // absolute magnitudes, since relative spectrum shares change during decay.
+        const bin = Math.round(p.frequency * previousSpectrum.length * 2 / sampleRate);
+        let oldAmplitude = 0;
+        for (let i = Math.max(0, bin - 2); i <= Math.min(previousSpectrum.length - 1, bin + 2); i++) oldAmplitude = Math.max(oldAmplitude, previousSpectrum[i]);
+        const current = candidates.find(c => c.midi === p.midi)?.fundamental.amplitude ?? 0;
+        return current > oldAmplitude * 1.35 || rms > previousRms * 1.14;
+      });
+    for (const pitch of pitches) this.recent.set(pitch.midi, frameNumber);
+    for (const [midi, last] of this.recent) if (frameNumber - last > 24) this.recent.delete(midi);
     return { pitches, fit };
   }
 }

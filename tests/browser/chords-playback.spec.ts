@@ -24,6 +24,9 @@ test('microphone chords → independent notes → score → automatic audible re
   await expect(page.getByRole('button', { name: 'Notes & chords', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Start listening', exact: true }).click();
   await expect(page.getByTestId('live-chord')).toHaveText('C', { timeout: 12000 });
+  await expect(page.locator('.chord-symbol')).toHaveText('C');
+  await expect(page.locator('.voice-row')).toHaveCount(3);
+  await expect(page.locator('.chord-analysis')).toContainText('Major third');
   await expect(page.locator('.piano-key.active')).toHaveCount(3);
   await expect(page.locator('.sheet-scroll svg .vf-stavenote')).not.toHaveCount(0);
   await page.screenshot({ path: 'artifacts/chord-live.png', fullPage: true });

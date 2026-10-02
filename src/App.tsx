@@ -11,6 +11,7 @@ import { Timeline } from './components/Timeline';
 import { Modal } from './components/Modal';
 import { PlaybackControls } from './components/PlaybackControls';
 import { ChordProgression } from './components/ChordProgression';
+import { ChordAnalysis } from './components/ChordAnalysis';
 import { downloadSession, jsonExporter, midiExporter, musicXmlExporter } from './session/exports';
 import { readPreference, readSessions, writePreference } from './session/storage';
 import { formatTime } from './music/noteUtils';
@@ -66,6 +67,7 @@ export default function App() {
         <div className="studio-grid">
           <LiveNote pitch={practice.pitch} frame={practice.frame} listening={listening} levels={practice.levels} spelling={spelling} mode={detectionMode} chord={practice.chord} activeNotes={practice.activeNotes}/>
           <AudioControls status={practice.status} micState={micState} elapsed={practice.elapsed} count={practice.session.notes.length} bpm={practice.session.bpm} rms={practice.frame?.rms ?? 0} start={startListening} stop={pause => void finishListening(pause)} restart={restart} setBpm={practice.setBpm} onGuide={() => setModal('guide')}/>
+          {detectionMode === 'chords' && <ChordAnalysis chord={practice.chord} activeNotes={practice.activeNotes} frame={practice.frame} spelling={spelling} listening={listening}/>}
           <MusicStaff notes={practice.session.notes} activeIds={activeIds} spelling={spelling}/>
           <Timeline notes={practice.session.notes} spelling={spelling} activeIds={activeIds}/>
           <PlaybackControls player={player} blocked={recording} hasNotes={practice.session.notes.length > 0} autoReplay={autoReplay} setAutoReplay={setAutoReplay} spelling={spelling}/>
