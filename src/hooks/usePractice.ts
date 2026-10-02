@@ -1,25 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioInput } from '../audio/audioInput';
-import { NoteTracker } from '../audio/noteTracker';
-import type { MusicalPitch, NoteEvent, PitchFrame, PracticeSession } from '../music/types';
+import { PolyphonicTracker } from '../audio/polyphonicTracker';
+import type { ChordEvent, DetectionMode, MusicalPitch, NoteEvent, PitchFrame, PracticeSession } from '../music/types';
 import { mapFrequency } from '../music/noteUtils';
 import { quantizeDuration } from '../music/rhythmDetector';
 import type { TranslationKey } from '../i18n';
 import { newSession, saveSession } from '../session/storage';
+import { detectChord, type ChordResult } from '../music/chordDetector';
+import { createId } from '../music/id';
 
 export type PracticeStatus = 'idle' | 'starting' | 'listening' | 'paused';
-export function usePractice(gateDb: number) {
+export function usePractice(gateDb: number, detectionMode: DetectionMode) {
   const [session, setSession] = useState<PracticeSession>(() => newSession());
   const [status, setStatus] = useState<PracticeStatus>('idle');
   const [frame, setFrame] = useState<PitchFrame | null>(null);
   const [pitch, setPitch] = useState<MusicalPitch | null>(null);
   const [activeMidi, setActiveMidi] = useState<number | null>(null);
+  const [activeNotes, setActiveNotes] = useState<NoteEvent[]>([]);
+  const [chord, setChord] = useState<ChordResult>(() => detectChord([]));
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<TranslationKey | null>(null);
   const [storageError, setStorageError] = useState(false);
   const [levels, setLevels] = useState<number[]>(Array(48).fill(0));
   const engineRef = useRef<AudioInput | null>(null);
-  const trackerRef = useRef(new NoteTracker());
+  const trackerRef = useRef(new PolyphonicTracker());
+  const modeRef = useRef(detectionMode);
+  const chordRef = useRef<ChordEvent | null>(null);
+  const chordCandidateRef = useRef({ signature: '', count: 0 });
   const sessionRef = useRef(session);
   const runRef = useRef(0);
   const elapsedRef = useRef(0);
@@ -28,6 +35,7 @@ export function usePractice(gateDb: number) {
   const lastRenderRef = useRef(0);
   const statusRef = useRef<PracticeStatus>('idle');
   gateRef.current = gateDb;
+  modeRef.current = detectionMode;
   if (engineRef.current) engineRef.current.gateDb = gateDb;
   const time = useCallback(() => elapsedRef.current + (startedRef.current === null ? 0 : (performance.now() - startedRef.current) / 1000), []);
   const commit = useCallback((next: PracticeSession) => { sessionRef.current = next; setSession(next); }, []);
@@ -37,8 +45,15 @@ export function usePractice(gateDb: number) {
     runRef.current++;
     elapsedRef.current = time(); startedRef.current = null;
     trackerRef.current.finish(elapsedRef.current);
+    if (chordRef.current) {
+      const ended = { ...chordRef.current, duration: Math.max(.06, elapsedRef.current - chordRef.current.onset) };
+      commit({ ...sessionRef.current, chords: [...(sessionRef.current.chords ?? []), ended] });
+      chordRef.current = null;
+    }
+    chordCandidateRef.current = { signature: '', count: 0 };
     const engine = engineRef.current; engineRef.current = null;
     setMode(pause ? 'paused' : 'idle'); setActiveMidi(null); setPitch(null); setFrame(null);
+    setActiveNotes([]); setChord(detectChord([]));
     setLevels(Array(48).fill(0)); setElapsed(elapsedRef.current);
     const snapshot = { ...sessionRef.current, elapsed: elapsedRef.current };
     commit(snapshot); setStorageError(!saveSession(snapshot));
@@ -49,16 +64,16 @@ export function usePractice(gateDb: number) {
     if (engineRef.current) return;
     setError(null); setMode('starting');
     const run = ++runRef.current;
-    const engine = new AudioInput(); engineRef.current = engine; engine.gateDb = gateRef.current;
+    const engine = new AudioInput(); engineRef.current = engine; engine.gateDb = gateRef.current; engine.mode = modeRef.current;
+    commit({ ...sessionRef.current, detectionMode: modeRef.current });
     const tracker = trackerRef.current;
     tracker.reset();
     tracker.onStart = (note: NoteEvent) => {
       if (sessionRef.current.notes.length >= 10000) { setError('sessionLimit'); void stop(); return; }
-      commit({ ...sessionRef.current, notes: [...sessionRef.current.notes, note] }); setActiveMidi(note.midi);
+      commit({ ...sessionRef.current, notes: [...sessionRef.current.notes, note].sort((a, b) => a.onset - b.onset || a.midi - b.midi) });
     };
     tracker.onEnd = note => {
       commit({ ...sessionRef.current, notes: sessionRef.current.notes.map(n => n.id === note.id ? note : n) });
-      setActiveMidi(null);
     };
     tracker.onUpdate = note => {
       // Only change notation when the rhythmic bucket changes; preserve the latest event in the ref.
@@ -77,10 +92,23 @@ export function usePractice(gateDb: number) {
       // Timestamp at the center of the analysis window, accounting for capture latency.
       const timestamp = Math.max(baseTime, baseTime + next.timestamp - origin - next.windowMs / 2000);
       tracker.process(next, timestamp, sessionRef.current.bpm);
+      const active = tracker.active;
+      const evidence = active.filter(n => next.pitches?.some(p => p.midi === n.midi)).map(n => ({ midi: n.midi, frequency: n.frequency, confidence: n.confidence }));
+      const nextChord = next.mode === 'chords' ? detectChord(evidence) : detectChord([]);
+      const signature = nextChord.status === 'detected' ? `${nextChord.root}:${nextChord.quality}:${nextChord.midis.join(',')}` : '';
+      const previous = chordCandidateRef.current;
+      chordCandidateRef.current = { signature, count: signature && signature === previous.signature ? previous.count + 1 : 1 };
+      const confirmed = signature && chordCandidateRef.current.count >= 2;
+      if (chordRef.current && (!confirmed || `${chordRef.current.root}:${chordRef.current.quality}:${chordRef.current.midis.join(',')}` !== signature)) {
+        const ended = { ...chordRef.current, duration: Math.max(.06, timestamp - chordRef.current.onset) };
+        commit({ ...sessionRef.current, chords: [...(sessionRef.current.chords ?? []), ended] }); chordRef.current = null;
+      }
+      if (confirmed && !chordRef.current) chordRef.current = { id: createId(), onset: timestamp, duration: 0, root: nextChord.root!, bass: nextChord.bass!, quality: nextChord.quality!, midis: nextChord.midis, confidence: nextChord.confidence };
       if (performance.now() - lastRenderRef.current >= 65) {
         lastRenderRef.current = performance.now(); setFrame(next);
-        const mapped = next.frequency && next.confidence >= 0.85 ? mapFrequency(next.frequency) : null;
-        setPitch(mapped && mapped.midi === tracker.active?.midi ? mapped : null);
+        setActiveNotes(active); setActiveMidi(active[0]?.midi ?? null);
+        setPitch(active[0] ? mapFrequency(active[0].frequency) : null);
+        setChord(confirmed ? nextChord : detectChord([]));
         setLevels(previous => [...previous.slice(1), next.rms]);
       }
     };
@@ -100,7 +128,7 @@ export function usePractice(gateDb: number) {
   }, [commit, setMode, stop]);
 
   const clear = useCallback(() => {
-    trackerRef.current.reset(); setActiveMidi(null); setPitch(null);
+    trackerRef.current.reset(); setActiveMidi(null); setActiveNotes([]); setChord(detectChord([])); setPitch(null);
     elapsedRef.current = 0; startedRef.current = statusRef.current === 'listening' ? performance.now() : null;
     commit(newSession(sessionRef.current.bpm)); setElapsed(0);
   }, [commit]);
@@ -110,12 +138,12 @@ export function usePractice(gateDb: number) {
   }, [clear, start, stop]);
   const load = useCallback(async (saved: PracticeSession) => {
     await stop(); trackerRef.current.reset(); elapsedRef.current = saved.elapsed;
-    commit(saved); setElapsed(saved.elapsed); setMode('paused'); setError(null);
+    commit({ ...saved, notes: saved.notes.map(n => ({ ...n, ended: true })) }); setElapsed(saved.elapsed); setMode('paused'); setError(null);
   }, [commit, setMode, stop]);
   const setBpm = useCallback((bpm: number) => { commit({ ...sessionRef.current, bpm: Math.min(240, Math.max(30, bpm)) }); }, [commit]);
   const snapshot = useCallback((): PracticeSession => {
     const now = time();
-    return { ...sessionRef.current, elapsed: now, notes: sessionRef.current.notes.map(note => note.ended ? note :
+    return { ...sessionRef.current, elapsed: now, chords: [...(sessionRef.current.chords ?? []), ...(chordRef.current ? [{ ...chordRef.current, duration: Math.max(.06, now - chordRef.current.onset) }] : [])], notes: sessionRef.current.notes.map(note => note.ended ? note :
       { ...note, duration: Math.max(0.06, now - note.onset), rhythm: quantizeDuration(Math.max(0.06, now - note.onset), note.bpm) }) };
   }, [time]);
 
@@ -134,5 +162,5 @@ export function usePractice(gateDb: number) {
       runRef.current++; void engineRef.current?.stop();
     };
   }, [snapshot, stop]);
-  return { session, status, frame, pitch, activeMidi, elapsed, error, storageError, levels, start, stop, restart, load, setBpm, snapshot };
+  return { session, status, frame, pitch, activeMidi, activeNotes, chord, elapsed, error, storageError, levels, start, stop, restart, load, setBpm, snapshot };
 }

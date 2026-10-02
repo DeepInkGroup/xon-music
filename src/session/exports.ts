@@ -1,5 +1,7 @@
 import { RHYTHM_BEATS } from '../music/rhythmDetector';
 import { midiName } from '../music/noteUtils';
+import { groupNotes } from '../music/noteGroups';
+import { quantizeDuration } from '../music/rhythmDetector';
 import type { PracticeSession, Spelling } from '../music/types';
 
 export interface SessionExporter { extension: string; mime: string; serialize(session: PracticeSession, spelling: Spelling): string | Uint8Array; }
@@ -38,11 +40,18 @@ export const musicXmlExporter: SessionExporter = {
     const types = { w: 'whole', h: 'half', q: 'quarter', '8': 'eighth' };
     // Senza-misura transcription: approximate durations, chronological notes, no invented rests.
     const measures: string[] = [];
-    for (let offset = 0; offset < session.notes.length || offset === 0; offset += 8) {
-      const notes = session.notes.slice(offset, offset + 8).map(note => {
-        const name = midiName(note.midi, spelling);
-        const alter = name.includes('#') ? 1 : name.includes('b') ? -1 : 0;
-        return `<note><pitch><step>${name[0]}</step><alter>${alter}</alter><octave>${note.octave}</octave></pitch><duration>${RHYTHM_BEATS[note.rhythm] * divisions}</duration><type>${types[note.rhythm]}</type>${alter ? `<accidental>${alter === 1 ? 'sharp' : 'flat'}</accidental>` : ''}<staff>${note.midi < 60 ? 2 : 1}</staff></note>`;
+    const groups = groupNotes(session.notes);
+    for (let offset = 0; offset < groups.length || offset === 0; offset += 8) {
+      const notes = groups.slice(offset, offset + 8).map(group => {
+        const rhythm = quantizeDuration(group.duration, group.notes[0].bpm);
+        const duration = RHYTHM_BEATS[rhythm] * divisions;
+        const staffGroups = [group.notes.filter(n => n.midi >= 60), group.notes.filter(n => n.midi < 60)];
+        const voices = staffGroups.map((events, staff) => events.map((note, index) => {
+          const name = midiName(note.midi, spelling);
+          const alter = name.includes('#') ? 1 : name.includes('b') ? -1 : 0;
+          return `<note>${index ? '<chord/>' : ''}<pitch><step>${name[0]}</step><alter>${alter}</alter><octave>${note.octave}</octave></pitch><duration>${duration}</duration><voice>${staff + 1}</voice><type>${types[rhythm]}</type>${alter ? `<accidental>${alter === 1 ? 'sharp' : 'flat'}</accidental>` : ''}<staff>${staff + 1}</staff></note>`;
+        }).join('\n'));
+        return `${voices[0]}${voices[0] && voices[1] ? `<backup><duration>${duration}</duration></backup>` : ''}${voices[1]}`;
       }).join('\n');
       const attributes = offset === 0 ? `<attributes><divisions>${divisions}</divisions><time><senza-misura/></time><staves>2</staves><clef number="1"><sign>G</sign><line>2</line></clef><clef number="2"><sign>F</sign><line>4</line></clef></attributes><direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${session.bpm}</per-minute></metronome></direction-type><sound tempo="${session.bpm}"/></direction>` : '';
       measures.push(`<measure number="${offset / 8 + 1}" implicit="yes">${attributes}\n${notes}</measure>`);

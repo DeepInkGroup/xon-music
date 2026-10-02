@@ -6,6 +6,7 @@ import { chromium } from '@playwright/test';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pagesBuild = process.argv.includes('--pages');
+const chords = process.argv.includes('--chords');
 const base = process.env.XON_CHECK_BASE ?? (pagesBuild ? '/xon-music/' : '/');
 const outputDirectory = process.env.XON_CHECK_OUT_DIR ?? (pagesBuild ? 'dist-pages' : 'dist');
 const remoteUrl = process.env.XON_CHECK_URL;
@@ -25,7 +26,7 @@ try {
   assert(ready, 'Production preview did not start.');
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: [
     '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
-    `--use-file-for-fake-audio-capture=${path.join(root, 'tests/fixtures/piano-sequence.wav')}`,
+    `--use-file-for-fake-audio-capture=${path.join(root, `tests/fixtures/${chords ? 'chord' : 'piano'}-sequence.wav`)}`,
   ] });
   const page = await browser.newPage();
   const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -40,6 +41,10 @@ try {
   await page.getByRole('button', { name: 'Start listening', exact: true }).click();
   await page.locator('.piano-key[data-midi="60"].active').waitFor({ timeout: 12000 });
   assert.equal(await page.getByTestId('live-note').textContent(), 'C4');
+  if (chords) {
+    await page.getByTestId('live-chord').filter({ hasText: /^C$/ }).waitFor();
+    assert.equal(await page.locator('.piano-key.active').count(), 3);
+  }
   assert(await page.locator('.sheet-scroll svg .vf-stavenote').count() > 0);
   await page.screenshot({ path: path.join(root, 'artifacts/live-production.png'), fullPage: true });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
@@ -49,9 +54,11 @@ try {
   await page.waitForFunction(count => document.querySelectorAll('[data-testid="timeline-note"]').length > count, firstCount, { timeout: 12000 });
   await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
   assert(await page.evaluate(() => window.testStreams.length === 2 && window.testStreams.every(stream => stream.getTracks().every(track => track.readyState === 'ended'))));
+  await page.getByRole('button', { name: 'Pause playback', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Stop playback', exact: true }).click();
   assert.equal(await page.locator('.piano-key.active').count(), 0);
   assert.deepEqual(errors, []);
-  console.log(`${appUrl} passed: actual microphone capture, measured C4, VexFlow notes, pause/resume, and released microphone tracks.`);
+  console.log(`${appUrl} passed: actual microphone capture, measured ${chords ? 'C major with three voices' : 'C4'}, VexFlow notes, pause/resume, automatic replay, and released microphone tracks.`);
 } finally {
   await browser?.close(); server?.kill();
 }

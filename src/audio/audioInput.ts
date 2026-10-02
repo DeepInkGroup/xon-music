@@ -1,4 +1,4 @@
-import type { PitchFrame } from '../music/types';
+import type { DetectionMode, PitchFrame } from '../music/types';
 
 export class AudioInput {
   private context: AudioContext | null = null;
@@ -8,6 +8,7 @@ export class AudioInput {
   private worker: Worker | null = null;
   private cancelled = false;
   gateDb = -45;
+  mode: DetectionMode = 'chords';
   onFrame: (frame: PitchFrame) => void = () => {};
   onInterrupted: () => void = () => {};
   get currentTime(): number { return this.context?.currentTime ?? 0; }
@@ -38,7 +39,7 @@ export class AudioInput {
       this.worker.onerror = () => this.onInterrupted();
       this.capture.onprocessorerror = () => this.onInterrupted();
       this.capture.port.onmessage = ({ data }: MessageEvent<{ samples: Float32Array; sampleRate: number; timestamp: number }>) => {
-        this.worker?.postMessage({ ...data, gateDb: this.gateDb }, [data.samples.buffer]);
+        this.worker?.postMessage({ ...data, gateDb: this.gateDb, mode: this.mode }, [data.samples.buffer]);
       };
       this.source = context.createMediaStreamSource(stream);
       this.source.connect(this.capture);

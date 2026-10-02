@@ -5,6 +5,7 @@ import type { NoteEvent, PitchFrame } from '../music/types';
 
 /** Pitch persistence, release hysteresis and same-note reattack segmentation. */
 export class NoteTracker {
+  constructor(private minimumConfidence = .85, private stableFrames = 2, private allowRetrigger = true) {}
   active: NoteEvent | null = null;
   private candidate: { midi: number; count: number; since: number } | null = null;
   private lastGoodTime = 0;
@@ -16,7 +17,7 @@ export class NoteTracker {
   onUpdate: (note: NoteEvent) => void = () => {};
 
   process(frame: PitchFrame, time: number, bpm: number): void {
-    const good = frame.frequency !== null && frame.confidence >= 0.85;
+    const good = frame.frequency !== null && frame.confidence >= this.minimumConfidence;
     const pitch = good ? mapFrequency(frame.frequency!) : null;
     if (!pitch || pitch.midi < 21 || pitch.midi > 108) {
       this.candidate = null;
@@ -28,7 +29,7 @@ export class NoteTracker {
       this.lastGoodTime = time;
       this.valleyRms = Math.min(this.valleyRms, frame.rms);
       // Require an amplitude valley and a rising attack, with a minimum interval.
-      const reattack = time - this.lastRetrigger > 0.22 && frame.rms > this.valleyRms * 2.2 && frame.rms > this.previousRms * 1.3;
+      const reattack = this.allowRetrigger && time - this.lastRetrigger > 0.22 && frame.rms > this.valleyRms * 2.2 && frame.rms > this.previousRms * 1.3;
       if (reattack) {
         this.finish(time);
         this.begin(pitch.frequency, frame.confidence, time, bpm);
@@ -41,7 +42,7 @@ export class NoteTracker {
     } else {
       if (this.candidate?.midi === pitch.midi) this.candidate.count++;
       else this.candidate = { midi: pitch.midi, count: 1, since: time };
-      if (this.candidate.count >= 2) {
+      if (this.candidate.count >= this.stableFrames) {
         const onset = this.candidate.since;
         this.finish(onset);
         this.begin(pitch.frequency, frame.confidence, onset, bpm);

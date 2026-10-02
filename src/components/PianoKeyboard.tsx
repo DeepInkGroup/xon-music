@@ -7,11 +7,12 @@ import { useT } from '../i18n';
 const MIDIS = Array.from({ length: 88 }, (_, i) => i + 21);
 const WHITES = MIDIS.filter(midi => !isBlack(midi));
 const WHITE_WIDTH = 38;
-export function PianoKeyboard({ activeMidi, spelling }: { activeMidi: number | null; spelling: Spelling }) {
+export function PianoKeyboard({ activeMidis, spelling }: { activeMidis: number[]; spelling: Spelling }) {
   const t = useT();
   const [labels, setLabels] = useState(true);
   const [follow, setFollow] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
+  const activeMidi = activeMidis[0] ?? null;
   const targetKey = (midi: number) => scroller.current?.querySelector<HTMLElement>(`[data-midi="${midi}"]`);
   useEffect(() => {
     const node = scroller.current;
@@ -30,10 +31,10 @@ export function PianoKeyboard({ activeMidi, spelling }: { activeMidi: number | n
     <div className="card-heading keyboard-heading"><div><h2 id="keyboard-title"><Piano size={18}/>{t('keyboard')}</h2><p className="muted keyboard-description">{t('keyboardSub')}</p></div><div className="keyboard-options"><label><input type="checkbox" checked={follow} onChange={e => setFollow(e.target.checked)}/>{t('follow')}</label><label><input type="checkbox" checked={labels} onChange={e => setLabels(e.target.checked)}/>{t('labels')}</label></div></div>
     <div className="keyboard-scroll" ref={scroller} dir="ltr" tabIndex={0} aria-label={t('keyboard')}>
       <div className="piano-keys" style={{ width: WHITES.length * WHITE_WIDTH }}>
-        {WHITES.map(midi => <div key={midi} className={`piano-key white ${midi === activeMidi ? 'active' : ''}`} data-midi={midi} role="img" aria-label={`${midiName(midi, spelling)}${midi === activeMidi ? `, ${t('activeNote')}` : ''}`} style={{ width: WHITE_WIDTH }}><span className={midi % 12 === 0 ? 'c-label' : ''}>{labels ? midiName(midi, spelling) : midi % 12 === 0 ? `C${Math.floor(midi / 12) - 1}` : ''}</span>{midi === activeMidi && <i/>}</div>)}
+        {WHITES.map(midi => <div key={midi} className={`piano-key white ${activeMidis.includes(midi) ? 'active' : ''}`} data-midi={midi} role="img" aria-label={`${midiName(midi, spelling)}${activeMidis.includes(midi) ? `, ${t('activeNote')}` : ''}`} style={{ width: WHITE_WIDTH }}><span className={midi % 12 === 0 ? 'c-label' : ''}>{labels ? midiName(midi, spelling) : midi % 12 === 0 ? `C${Math.floor(midi / 12) - 1}` : ''}</span>{activeMidis.includes(midi) && <i/>}</div>)}
         {MIDIS.filter(isBlack).map(midi => {
           const whiteIndex = WHITES.filter(n => n < midi).length;
-          return <div key={midi} className={`piano-key black ${midi === activeMidi ? 'active' : ''}`} data-midi={midi} role="img" aria-label={`${midiName(midi, spelling)}${midi === activeMidi ? `, ${t('activeNote')}` : ''}`} style={{ left: whiteIndex * WHITE_WIDTH - 12, width: 24 }}><span>{labels ? midiName(midi, spelling) : ''}</span>{midi === activeMidi && <i/>}</div>;
+          return <div key={midi} className={`piano-key black ${activeMidis.includes(midi) ? 'active' : ''}`} data-midi={midi} role="img" aria-label={`${midiName(midi, spelling)}${activeMidis.includes(midi) ? `, ${t('activeNote')}` : ''}`} style={{ left: whiteIndex * WHITE_WIDTH - 12, width: 24 }}><span>{labels ? midiName(midi, spelling) : ''}</span>{activeMidis.includes(midi) && <i/>}</div>;
         })}
       </div>
     </div>

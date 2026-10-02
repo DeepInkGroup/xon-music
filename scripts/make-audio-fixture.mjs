@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import './make-chord-fixture.mjs';
 
 // Test-only reference audio. This is never imported or served by the application.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

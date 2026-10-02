@@ -2,13 +2,13 @@ import type { PracticeSession } from '../music/types';
 import { createId } from '../music/id';
 const KEY = 'xon-music.sessions.v1';
 export function newSession(bpm = 120): PracticeSession {
-  return { version: 1, id: createId(), startedAt: new Date().toISOString(), bpm, elapsed: 0, notes: [] };
+  return { version: 2, id: createId(), startedAt: new Date().toISOString(), bpm, elapsed: 0, notes: [], chords: [] };
 }
 export function readSessions(): PracticeSession[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(KEY) ?? '[]');
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((s): s is PracticeSession => s?.version === 1 && typeof s.id === 'string' &&
+    return parsed.filter((s): s is PracticeSession => (s?.version === 1 || s?.version === 2) && typeof s.id === 'string' &&
       typeof s.startedAt === 'string' && Number.isFinite(s.bpm) && Number.isFinite(s.elapsed) && Array.isArray(s.notes) &&
       s.notes.every((n: unknown) => !!n && typeof n === 'object' && 'midi' in n && 'onset' in n && 'duration' in n &&
         Number.isFinite(n.midi) && Number.isFinite(n.onset) && Number.isFinite(n.duration)));
